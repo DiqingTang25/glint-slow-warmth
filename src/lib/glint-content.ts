@@ -154,6 +154,32 @@ export function filterBannedWords(text: string): string {
   return out;
 }
 
+/**
+ * 过滤后若仅剩星号 / 标点 / 空白，返回 null —— 表示拒绝发布。
+ */
+export function sanitizeUserText(text: string): string | null {
+  const cleaned = filterBannedWords(text.trim());
+  const stripped = cleaned.replace(/[\s*\p{P}]/gu, "");
+  if (!stripped) return null;
+  return cleaned;
+}
+
+export const REPORT_REASONS = [
+  "恶意攻击",
+  "色情低俗",
+  "广告骚扰",
+  "其他不适",
+] as const;
+
+export const SHOP_ITEMS = [
+  { id: "skin-sakura", emoji: "🌸", name: "樱花主题色", desc: "粉嫩柔光皮肤", cost: 50 },
+  { id: "skin-night", emoji: "🌙", name: "暗夜模式皮肤", desc: "安静的深色调", cost: 80 },
+  { id: "avatar-otter", emoji: "🦦", name: "限定水獭头像", desc: "树洞专属身份", cost: 60 },
+  { id: "postcard", emoji: "📮", name: "实体明信片", desc: "由校园信使寄出", cost: 200 },
+  { id: "letter-paper", emoji: "📜", name: "复古信纸", desc: "写慢信用", cost: 30 },
+  { id: "badge-firefly", emoji: "🪰", name: "萤火徽章", desc: "陪伴他人的勋章", cost: 100 },
+] as const;
+
 export function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }

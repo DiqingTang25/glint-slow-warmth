@@ -8,6 +8,7 @@ import {
   getUser,
   listPosts,
   updatePost,
+  updateUser,
   type TreeholePost,
 } from "@/lib/glint-db";
 import {
@@ -15,7 +16,8 @@ import {
   ANIMALS,
   EMOTION_TAGS,
   REPLY_TEMPLATES,
-  filterBannedWords,
+  REPORT_REASONS,
+  sanitizeUserText,
   pick,
   relativeTime,
 } from "@/lib/glint-content";
@@ -108,15 +110,22 @@ function TreeholeView() {
   }, []);
 
   const blocked = creditScore < 60;
+  const [reportTarget, setReportTarget] = useState<TreeholePost | null>(null);
+  const [appealOpen, setAppealOpen] = useState(false);
 
   const submit = async () => {
     if (!content.trim() || submitting || blocked) return;
+    const cleaned = sanitizeUserText(content);
+    if (!cleaned) {
+      setToast("内容包含不当词汇，请修改后再发");
+      setTimeout(() => setToast(null), 2200);
+      return;
+    }
     setSubmitting(true);
     try {
-      const cleaned = filterBannedWords(content.trim()).slice(0, 500);
       await addPost({
         anonymousAnimal: animal,
-        content: cleaned,
+        content: cleaned.slice(0, 500),
         emotionTag: tag,
         createdAt: new Date().toISOString(),
         replies: [],
@@ -134,11 +143,16 @@ function TreeholeView() {
   };
 
   const submitReply = async (post: TreeholePost, replyText: string) => {
-    if (!replyText.trim()) return;
-    const cleaned = filterBannedWords(replyText.trim()).slice(0, 200);
+    if (!replyText.trim() || blocked) return;
+    const cleaned = sanitizeUserText(replyText);
+    if (!cleaned) {
+      setToast("内容包含不当词汇，请修改后再发");
+      setTimeout(() => setToast(null), 2200);
+      return;
+    }
     post.replies.push({
       animal: pick(ANIMALS),
-      content: cleaned,
+      content: cleaned.slice(0, 200),
       createdAt: new Date().toISOString(),
     });
     await updatePost(post);
@@ -150,10 +164,22 @@ function TreeholeView() {
     refresh();
   };
 
-  const report = async (post: TreeholePost) => {
+  const submitReport = async (post: TreeholePost, _reason: string) => {
     post.reportCount += 1;
-    if (post.reportCount >= 3) post.isHidden = true;
+    let deducted = false;
+    if (post.reportCount >= 3 && !post.isHidden) {
+      post.isHidden = true;
+      const u = await getUser(post.openid || DEMO_OPENID);
+      await updateUser(
+        { creditScore: Math.max(0, u.creditScore - 20) },
+        post.openid || DEMO_OPENID
+      );
+      deducted = true;
+    }
     await updatePost(post);
+    setReportTarget(null);
+    setToast(deducted ? "已举报 · 帖子已隐藏" : "已举报，谢谢你");
+    setTimeout(() => setToast(null), 2200);
     refresh();
   };
 
@@ -168,13 +194,20 @@ function TreeholeView() {
 
       {blocked && (
         <div
-          className="rounded-2xl p-4 text-sm"
+          className="rounded-2xl p-4 text-sm flex items-center justify-between gap-3"
           style={{
             background: "color-mix(in oklab, var(--destructive) 12%, transparent)",
             color: "var(--destructive)",
           }}
         >
-          你的信用分较低，暂时无法发帖或回应。请稍后再来。
+          <span>信用分过低（{creditScore}），暂时无法参与树洞</span>
+          <button
+            onClick={() => setAppealOpen(true)}
+            className="rounded-full px-3 py-1.5 text-xs font-semibold"
+            style={{ background: "var(--destructive)", color: "var(--destructive-foreground)" }}
+          >
+            申诉
+          </button>
         </div>
       )}
 
@@ -241,9 +274,9 @@ function TreeholeView() {
           <PostCard
             key={p.id}
             post={p}
-            canReply={creditScore >= 80}
+            canReply={!blocked}
             onReply={() => setReplyTo(p)}
-            onReport={() => report(p)}
+            onReport={() => setReportTarget(p)}
             now={now}
             aiArrivesInMs={AI_REPLY_AFTER_MS}
             isFresh={p.id != null && freshIds.has(p.id)}
@@ -258,6 +291,16 @@ function TreeholeView() {
           onSubmit={(text) => submitReply(replyTo, text)}
         />
       )}
+
+      {reportTarget && (
+        <ReportModal
+          post={reportTarget}
+          onClose={() => setReportTarget(null)}
+          onSubmit={(reason) => submitReport(reportTarget, reason)}
+        />
+      )}
+
+      {appealOpen && <AppealModal onClose={() => setAppealOpen(false)} />}
 
       {toast && (
         <div
@@ -490,6 +533,142 @@ function ReplyModal({
             发送回应 +3 ✨
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ReportModal({
+  post,
+  onClose,
+  onSubmit,
+}: {
+  post: TreeholePost;
+  onClose: () => void;
+  onSubmit: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState<string>(REPORT_REASONS[0]);
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-end sm:place-items-center"
+      style={{ background: "rgba(0,0,0,0.45)" }}
+      onClick={onClose}
+    >
+      <div
+        className="glass shadow-soft w-full max-w-[480px] p-5 animate-fade-up"
+        style={{ borderTopLeftRadius: 32, borderTopRightRadius: 32 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-base font-semibold">举报「{post.anonymousAnimal}」的树洞</h3>
+          <button onClick={onClose} className="text-lg text-muted-foreground" aria-label="关闭">
+            ✕
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground">请选择原因。3 次被举报后，该帖子将被自动隐藏。</p>
+        <div className="mt-4 space-y-2">
+          {REPORT_REASONS.map((r) => (
+            <label
+              key={r}
+              className="flex cursor-pointer items-center gap-3 rounded-2xl px-3 py-3 text-sm"
+              style={{
+                background: reason === r ? "var(--primary-glow)" : "var(--secondary)",
+                border: reason === r ? "1px solid var(--primary)" : "1px solid transparent",
+              }}
+            >
+              <input
+                type="radio"
+                name="reason"
+                checked={reason === r}
+                onChange={() => setReason(r)}
+                className="accent-primary"
+              />
+              <span>{r}</span>
+            </label>
+          ))}
+        </div>
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-full border border-border px-5 py-3 text-sm font-medium text-muted-foreground"
+          >
+            取消
+          </button>
+          <button
+            onClick={() => onSubmit(reason)}
+            className="flex-[2] rounded-full px-5 py-3 text-sm font-semibold text-destructive-foreground"
+            style={{ background: "var(--destructive)" }}
+          >
+            提交举报
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AppealModal({ onClose }: { onClose: () => void }) {
+  const [reason, setReason] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-end sm:place-items-center"
+      style={{ background: "rgba(0,0,0,0.45)" }}
+      onClick={onClose}
+    >
+      <div
+        className="glass shadow-soft w-full max-w-[480px] p-5 animate-fade-up"
+        style={{ borderTopLeftRadius: 32, borderTopRightRadius: 32 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-base font-semibold">信用分申诉</h3>
+          <button onClick={onClose} className="text-lg text-muted-foreground" aria-label="关闭">
+            ✕
+          </button>
+        </div>
+        {submitted ? (
+          <div className="py-6 text-center">
+            <p className="text-3xl">📨</p>
+            <p className="mt-3 text-sm text-foreground">已记录，管理员会尽快处理。</p>
+            <button
+              onClick={onClose}
+              className="mt-5 rounded-full px-6 py-2.5 text-sm font-semibold text-primary-foreground gradient-warm"
+            >
+              好的
+            </button>
+          </div>
+        ) : (
+          <>
+            <p className="text-xs text-muted-foreground">
+              告诉我们发生了什么。我们会人工复核你的申诉。
+            </p>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value.slice(0, 300))}
+              rows={4}
+              placeholder="例如：我并未发布违规内容…"
+              className="mt-3 w-full resize-none rounded-2xl bg-background/60 p-3 text-sm outline-none"
+              style={{ border: "1px solid var(--border)" }}
+            />
+            <div className="mt-1 text-right text-xs text-muted-foreground">{reason.length} / 300</div>
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={onClose}
+                className="flex-1 rounded-full border border-border px-5 py-3 text-sm font-medium text-muted-foreground"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => setSubmitted(true)}
+                disabled={!reason.trim()}
+                className="flex-[2] rounded-full px-5 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50 gradient-warm"
+              >
+                提交申诉
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
