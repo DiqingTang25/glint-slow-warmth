@@ -42,6 +42,7 @@ function TreeholeView() {
   const [creditScore, setCreditScore] = useState(100);
   const [submitting, setSubmitting] = useState(false);
   const [replyTo, setReplyTo] = useState<TreeholePost | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   const refresh = async () => {
     const [p, u] = await Promise.all([listPosts(), getUser()]);
@@ -117,6 +118,8 @@ function TreeholeView() {
     await addLightPoints(3);
     window.dispatchEvent(new Event("glint:user-updated"));
     setReplyTo(null);
+    setToast("回应已送达 · 光能 +3 ✨");
+    setTimeout(() => setToast(null), 2200);
     refresh();
   };
 
