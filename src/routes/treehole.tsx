@@ -42,6 +42,7 @@ function TreeholeView() {
   const [creditScore, setCreditScore] = useState(100);
   const [submitting, setSubmitting] = useState(false);
   const [replyTo, setReplyTo] = useState<TreeholePost | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   const refresh = async () => {
     const [p, u] = await Promise.all([listPosts(), getUser()]);
@@ -117,6 +118,8 @@ function TreeholeView() {
     await addLightPoints(3);
     window.dispatchEvent(new Event("glint:user-updated"));
     setReplyTo(null);
+    setToast("回应已送达 · 光能 +3 ✨");
+    setTimeout(() => setToast(null), 2200);
     refresh();
   };
 
@@ -225,6 +228,15 @@ function TreeholeView() {
           onSubmit={(text) => submitReply(replyTo, text)}
         />
       )}
+
+      {toast && (
+        <div
+          className="glass shadow-soft fixed left-1/2 z-[60] -translate-x-1/2 rounded-full px-5 py-3 text-sm font-medium text-foreground animate-fade-up"
+          style={{ bottom: 96, border: "1px solid var(--primary)" }}
+        >
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
@@ -265,27 +277,53 @@ function PostCard({
         )}
       </p>
 
-      {post.replies.length > 0 && (
-        <div className="mt-4 space-y-2 rounded-2xl bg-background/40 p-3">
-          {post.replies.map((r, i) => (
-            <div key={i} className="text-xs leading-relaxed">
-              <span className="font-medium text-primary">{r.animal}</span>
-              <span className="ml-2 text-muted-foreground">{relativeTime(r.createdAt)}</span>
-              <p className="mt-1 text-foreground">{r.content}</p>
-            </div>
-          ))}
+      {post.replies.length > 0 ? (
+        <div className="mt-4 space-y-3 rounded-2xl bg-background/40 p-3">
+          {post.replies.map((r, i) => {
+            const isAI = r.animal === "AI暖心伙伴";
+            return (
+              <div key={i} className="text-xs leading-relaxed">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="font-medium"
+                    style={{ color: isAI ? "var(--warning)" : "var(--primary)" }}
+                  >
+                    {isAI ? "🌿 " : ""}
+                    {r.animal}
+                  </span>
+                  <span className="text-muted-foreground">{relativeTime(r.createdAt)}</span>
+                </div>
+                <p className="mt-1 whitespace-pre-wrap text-foreground">{r.content}</p>
+              </div>
+            );
+          })}
         </div>
+      ) : (
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          还没有回声。若 30 分钟内无人回应，AI 暖心伙伴会陪陪 ta。
+        </p>
       )}
 
-      <footer className="mt-3 flex items-center justify-end gap-3 text-xs">
-        {canReply && (
-          <button onClick={onReply} className="text-primary font-medium">
-            回应
+      <footer className="mt-4 flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">
+          💬 {post.replies.length} 条回应
+        </span>
+        <div className="flex items-center gap-3">
+          {canReply ? (
+            <button
+              onClick={onReply}
+              className="rounded-full bg-primary-glow px-3 py-1.5 font-semibold text-primary transition hover:opacity-80"
+              style={{ background: "var(--primary-glow)" }}
+            >
+              + 温柔回应
+            </button>
+          ) : (
+            <span className="text-muted-foreground/70">信用分不足，暂不可回应</span>
+          )}
+          <button onClick={onReport} className="text-muted-foreground hover:text-destructive">
+            举报
           </button>
-        )}
-        <button onClick={onReport} className="text-muted-foreground hover:text-destructive">
-          举报
-        </button>
+        </div>
       </footer>
     </article>
   );
@@ -301,51 +339,81 @@ function ReplyModal({
   onSubmit: (text: string) => void;
 }) {
   const [text, setText] = useState("");
-  const templates = useMemo(() => REPLY_TEMPLATES, []);
+  const replierAnimal = useMemo(() => pick(ANIMALS), []);
+  const templates = REPLY_TEMPLATES;
+
+  const insertTemplate = (t: string) => {
+    setText((v) => {
+      const stripped = t.replace(/……$/, "");
+      if (!v.trim()) return stripped;
+      return v.endsWith("\n") || v.endsWith(" ") ? v + stripped : v + "\n" + stripped;
+    });
+  };
 
   return (
     <div
       className="fixed inset-0 z-50 grid place-items-end sm:place-items-center"
-      style={{ background: "rgba(0,0,0,0.4)" }}
+      style={{ background: "rgba(0,0,0,0.45)" }}
       onClick={onClose}
     >
       <div
         className="glass shadow-soft w-full max-w-[640px] p-5 animate-fade-up"
-        style={{ borderTopLeftRadius: 32, borderTopRightRadius: 32, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}
+        style={{ borderTopLeftRadius: 32, borderTopRightRadius: 32 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-1 flex items-center justify-between">
           <h3 className="text-base font-semibold">回应「{post.anonymousAnimal}」</h3>
-          <button onClick={onClose} className="text-muted-foreground">✕</button>
+          <button onClick={onClose} className="text-lg text-muted-foreground" aria-label="关闭">
+            ✕
+          </button>
         </div>
-        <p className="text-xs text-muted-foreground">建议从这些句式开始：</p>
+        <p className="text-xs text-muted-foreground">
+          这次你将以「{replierAnimal}」的身份回应，对方看不到你的真实信息。
+        </p>
+
+        <p className="mt-4 text-xs text-muted-foreground">温柔起手式 · 点击插入：</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {templates.map((t) => (
             <button
               key={t}
-              onClick={() => setText((v) => (v ? v : t))}
-              className="rounded-full bg-secondary px-3 py-1 text-xs text-secondary-foreground"
+              onClick={() => insertTemplate(t)}
+              className="rounded-full bg-secondary px-3 py-1 text-xs text-secondary-foreground transition hover:bg-primary-glow"
+              style={{ minHeight: 32 }}
             >
               {t}
             </button>
           ))}
         </div>
+
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value.slice(0, 200))}
           rows={4}
-          placeholder="温柔地说出你的回应（最多 200 字）"
-          className="mt-3 w-full resize-none rounded-2xl bg-background/60 p-3 text-sm outline-none"
+          autoFocus
+          placeholder="只是听见，也是一种陪伴。最多 200 字。"
+          className="mt-3 w-full resize-none rounded-2xl bg-background/60 p-3 text-sm outline-none focus:ring-2"
           style={{ border: "1px solid var(--border)" }}
         />
-        <div className="mt-1 text-right text-xs text-muted-foreground">{text.length} / 200</div>
-        <button
-          onClick={() => onSubmit(text)}
-          disabled={!text.trim()}
-          className="mt-3 w-full rounded-full px-5 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50 gradient-warm"
-        >
-          发送回应 +3 ✨
-        </button>
+        <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+          <span>不评判 · 不说教 · 不索取</span>
+          <span>{text.length} / 200</span>
+        </div>
+
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-full border border-border px-5 py-3 text-sm font-medium text-muted-foreground"
+          >
+            先不了
+          </button>
+          <button
+            onClick={() => onSubmit(text)}
+            disabled={!text.trim()}
+            className="flex-[2] rounded-full px-5 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50 gradient-warm"
+          >
+            发送回应 +3 ✨
+          </button>
+        </div>
       </div>
     </div>
   );
