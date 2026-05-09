@@ -327,51 +327,81 @@ function ReplyModal({
   onSubmit: (text: string) => void;
 }) {
   const [text, setText] = useState("");
-  const templates = useMemo(() => REPLY_TEMPLATES, []);
+  const replierAnimal = useMemo(() => pick(ANIMALS), []);
+  const templates = REPLY_TEMPLATES;
+
+  const insertTemplate = (t: string) => {
+    setText((v) => {
+      const stripped = t.replace(/……$/, "");
+      if (!v.trim()) return stripped;
+      return v.endsWith("\n") || v.endsWith(" ") ? v + stripped : v + "\n" + stripped;
+    });
+  };
 
   return (
     <div
       className="fixed inset-0 z-50 grid place-items-end sm:place-items-center"
-      style={{ background: "rgba(0,0,0,0.4)" }}
+      style={{ background: "rgba(0,0,0,0.45)" }}
       onClick={onClose}
     >
       <div
         className="glass shadow-soft w-full max-w-[640px] p-5 animate-fade-up"
-        style={{ borderTopLeftRadius: 32, borderTopRightRadius: 32, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}
+        style={{ borderTopLeftRadius: 32, borderTopRightRadius: 32 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-1 flex items-center justify-between">
           <h3 className="text-base font-semibold">回应「{post.anonymousAnimal}」</h3>
-          <button onClick={onClose} className="text-muted-foreground">✕</button>
+          <button onClick={onClose} className="text-lg text-muted-foreground" aria-label="关闭">
+            ✕
+          </button>
         </div>
-        <p className="text-xs text-muted-foreground">建议从这些句式开始：</p>
+        <p className="text-xs text-muted-foreground">
+          这次你将以「{replierAnimal}」的身份回应，对方看不到你的真实信息。
+        </p>
+
+        <p className="mt-4 text-xs text-muted-foreground">温柔起手式 · 点击插入：</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {templates.map((t) => (
             <button
               key={t}
-              onClick={() => setText((v) => (v ? v : t))}
-              className="rounded-full bg-secondary px-3 py-1 text-xs text-secondary-foreground"
+              onClick={() => insertTemplate(t)}
+              className="rounded-full bg-secondary px-3 py-1 text-xs text-secondary-foreground transition hover:bg-primary-glow"
+              style={{ minHeight: 32 }}
             >
               {t}
             </button>
           ))}
         </div>
+
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value.slice(0, 200))}
           rows={4}
-          placeholder="温柔地说出你的回应（最多 200 字）"
-          className="mt-3 w-full resize-none rounded-2xl bg-background/60 p-3 text-sm outline-none"
+          autoFocus
+          placeholder="只是听见，也是一种陪伴。最多 200 字。"
+          className="mt-3 w-full resize-none rounded-2xl bg-background/60 p-3 text-sm outline-none focus:ring-2"
           style={{ border: "1px solid var(--border)" }}
         />
-        <div className="mt-1 text-right text-xs text-muted-foreground">{text.length} / 200</div>
-        <button
-          onClick={() => onSubmit(text)}
-          disabled={!text.trim()}
-          className="mt-3 w-full rounded-full px-5 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50 gradient-warm"
-        >
-          发送回应 +3 ✨
-        </button>
+        <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+          <span>不评判 · 不说教 · 不索取</span>
+          <span>{text.length} / 200</span>
+        </div>
+
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-full border border-border px-5 py-3 text-sm font-medium text-muted-foreground"
+          >
+            先不了
+          </button>
+          <button
+            onClick={() => onSubmit(text)}
+            disabled={!text.trim()}
+            className="flex-[2] rounded-full px-5 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50 gradient-warm"
+          >
+            发送回应 +3 ✨
+          </button>
+        </div>
       </div>
     </div>
   );
