@@ -265,27 +265,53 @@ function PostCard({
         )}
       </p>
 
-      {post.replies.length > 0 && (
-        <div className="mt-4 space-y-2 rounded-2xl bg-background/40 p-3">
-          {post.replies.map((r, i) => (
-            <div key={i} className="text-xs leading-relaxed">
-              <span className="font-medium text-primary">{r.animal}</span>
-              <span className="ml-2 text-muted-foreground">{relativeTime(r.createdAt)}</span>
-              <p className="mt-1 text-foreground">{r.content}</p>
-            </div>
-          ))}
+      {post.replies.length > 0 ? (
+        <div className="mt-4 space-y-3 rounded-2xl bg-background/40 p-3">
+          {post.replies.map((r, i) => {
+            const isAI = r.animal === "AI暖心伙伴";
+            return (
+              <div key={i} className="text-xs leading-relaxed">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="font-medium"
+                    style={{ color: isAI ? "var(--warning)" : "var(--primary)" }}
+                  >
+                    {isAI ? "🌿 " : ""}
+                    {r.animal}
+                  </span>
+                  <span className="text-muted-foreground">{relativeTime(r.createdAt)}</span>
+                </div>
+                <p className="mt-1 whitespace-pre-wrap text-foreground">{r.content}</p>
+              </div>
+            );
+          })}
         </div>
+      ) : (
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          还没有回声。若 30 分钟内无人回应，AI 暖心伙伴会陪陪 ta。
+        </p>
       )}
 
-      <footer className="mt-3 flex items-center justify-end gap-3 text-xs">
-        {canReply && (
-          <button onClick={onReply} className="text-primary font-medium">
-            回应
+      <footer className="mt-4 flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">
+          💬 {post.replies.length} 条回应
+        </span>
+        <div className="flex items-center gap-3">
+          {canReply ? (
+            <button
+              onClick={onReply}
+              className="rounded-full bg-primary-glow px-3 py-1.5 font-semibold text-primary transition hover:opacity-80"
+              style={{ background: "var(--primary-glow)" }}
+            >
+              + 温柔回应
+            </button>
+          ) : (
+            <span className="text-muted-foreground/70">信用分不足，暂不可回应</span>
+          )}
+          <button onClick={onReport} className="text-muted-foreground hover:text-destructive">
+            举报
           </button>
-        )}
-        <button onClick={onReport} className="text-muted-foreground hover:text-destructive">
-          举报
-        </button>
+        </div>
       </footer>
     </article>
   );
