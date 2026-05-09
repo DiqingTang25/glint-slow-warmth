@@ -379,8 +379,6 @@ function PostCard({
           还没有人类回声，AI 暖心伙伴已经陪过 ta。
         </p>
       )}
-        </p>
-      )}
 
       <footer className="mt-4 flex items-center justify-between text-xs">
         <span className="text-muted-foreground">
