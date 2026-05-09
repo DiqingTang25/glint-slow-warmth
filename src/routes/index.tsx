@@ -129,29 +129,43 @@ function DiaryView() {
           )}
         </div>
 
-        <div className="mt-5 flex items-center justify-center gap-3">
+        <div className="mt-5 flex items-center justify-center gap-4">
           {(["😊", "😐", "😔"] as const).map((m, i) => {
             const presets = [3, 6, 8];
+            const labels = ["还不错", "一般般", "不太好"];
             const active = mood === m;
             return (
               <button
                 key={m}
+                type="button"
                 disabled={!!todayDiary}
                 onClick={() => {
                   setMood(m);
                   setStress(presets[i]);
                 }}
-                className="grid place-items-center rounded-full transition-all"
-                style={{
-                  width: 56,
-                  height: 56,
-                  fontSize: 28,
-                  background: active ? "var(--primary-glow)" : "var(--secondary)",
-                  border: active ? "2px solid var(--primary)" : "2px solid transparent",
-                  opacity: todayDiary ? 0.6 : 1,
-                }}
+                className="group flex flex-col items-center gap-1.5 transition-all duration-200 disabled:cursor-not-allowed"
+                style={{ opacity: todayDiary ? 0.55 : 1 }}
               >
-                {m}
+                <span
+                  className="grid place-items-center rounded-full transition-all duration-200"
+                  style={{
+                    width: 64,
+                    height: 64,
+                    fontSize: 32,
+                    background: active ? "var(--primary-glow)" : "var(--secondary)",
+                    border: active ? "2px solid var(--primary)" : "2px solid transparent",
+                    transform: active ? "scale(1.1)" : "scale(1)",
+                    boxShadow: active ? "0 8px 20px var(--primary-glow)" : "none",
+                  }}
+                >
+                  {m}
+                </span>
+                <span
+                  className="text-[11px] transition-colors"
+                  style={{ color: active ? "var(--primary)" : "var(--muted-foreground)", fontWeight: active ? 600 : 400 }}
+                >
+                  {labels[i]}
+                </span>
               </button>
             );
           })}
