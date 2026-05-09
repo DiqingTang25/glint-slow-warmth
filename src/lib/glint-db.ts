@@ -1,6 +1,6 @@
 // IndexedDB wrapper for Glint Slow Warmth
 const DB_NAME = "GlintSlowWarmthDB";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const DEMO_OPENID = "demo_user_001";
 
