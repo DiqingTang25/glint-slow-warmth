@@ -244,6 +244,9 @@ function TreeholeView() {
             canReply={creditScore >= 80}
             onReply={() => setReplyTo(p)}
             onReport={() => report(p)}
+            now={now}
+            aiArrivesInMs={AI_REPLY_AFTER_MS}
+            isFresh={p.id != null && freshIds.has(p.id)}
           />
         ))}
       </section>
