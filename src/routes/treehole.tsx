@@ -8,6 +8,7 @@ import {
   getUser,
   listPosts,
   updatePost,
+  updateUser,
   type TreeholePost,
 } from "@/lib/glint-db";
 import {
@@ -15,7 +16,8 @@ import {
   ANIMALS,
   EMOTION_TAGS,
   REPLY_TEMPLATES,
-  filterBannedWords,
+  REPORT_REASONS,
+  sanitizeUserText,
   pick,
   relativeTime,
 } from "@/lib/glint-content";
