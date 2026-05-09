@@ -10,6 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TreeholeRouteImport } from './routes/treehole'
+import { Route as RegisterRouteImport } from './routes/register'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as LightRouteImport } from './routes/light'
 import { Route as CompanionRouteImport } from './routes/companion'
 import { Route as IndexRouteImport } from './routes/index'
@@ -17,6 +19,16 @@ import { Route as IndexRouteImport } from './routes/index'
 const TreeholeRoute = TreeholeRouteImport.update({
   id: '/treehole',
   path: '/treehole',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LightRoute = LightRouteImport.update({
@@ -39,12 +51,16 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/companion': typeof CompanionRoute
   '/light': typeof LightRoute
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
   '/treehole': typeof TreeholeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/companion': typeof CompanionRoute
   '/light': typeof LightRoute
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
   '/treehole': typeof TreeholeRoute
 }
 export interface FileRoutesById {
@@ -52,20 +68,37 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/companion': typeof CompanionRoute
   '/light': typeof LightRoute
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
   '/treehole': typeof TreeholeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/companion' | '/light' | '/treehole'
+  fullPaths:
+    | '/'
+    | '/companion'
+    | '/light'
+    | '/login'
+    | '/register'
+    | '/treehole'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/companion' | '/light' | '/treehole'
-  id: '__root__' | '/' | '/companion' | '/light' | '/treehole'
+  to: '/' | '/companion' | '/light' | '/login' | '/register' | '/treehole'
+  id:
+    | '__root__'
+    | '/'
+    | '/companion'
+    | '/light'
+    | '/login'
+    | '/register'
+    | '/treehole'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CompanionRoute: typeof CompanionRoute
   LightRoute: typeof LightRoute
+  LoginRoute: typeof LoginRoute
+  RegisterRoute: typeof RegisterRoute
   TreeholeRoute: typeof TreeholeRoute
 }
 
@@ -76,6 +109,20 @@ declare module '@tanstack/react-router' {
       path: '/treehole'
       fullPath: '/treehole'
       preLoaderRoute: typeof TreeholeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/light': {
@@ -106,8 +153,20 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CompanionRoute: CompanionRoute,
   LightRoute: LightRoute,
+  LoginRoute: LoginRoute,
+  RegisterRoute: RegisterRoute,
   TreeholeRoute: TreeholeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
