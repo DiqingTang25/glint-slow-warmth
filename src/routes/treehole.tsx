@@ -537,3 +537,139 @@ function ReplyModal({
     </div>
   );
 }
+
+function ReportModal({
+  post,
+  onClose,
+  onSubmit,
+}: {
+  post: TreeholePost;
+  onClose: () => void;
+  onSubmit: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState<string>(REPORT_REASONS[0]);
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-end sm:place-items-center"
+      style={{ background: "rgba(0,0,0,0.45)" }}
+      onClick={onClose}
+    >
+      <div
+        className="glass shadow-soft w-full max-w-[480px] p-5 animate-fade-up"
+        style={{ borderTopLeftRadius: 32, borderTopRightRadius: 32 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-base font-semibold">举报「{post.anonymousAnimal}」的树洞</h3>
+          <button onClick={onClose} className="text-lg text-muted-foreground" aria-label="关闭">
+            ✕
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground">请选择原因。3 次被举报后，该帖子将被自动隐藏。</p>
+        <div className="mt-4 space-y-2">
+          {REPORT_REASONS.map((r) => (
+            <label
+              key={r}
+              className="flex cursor-pointer items-center gap-3 rounded-2xl px-3 py-3 text-sm"
+              style={{
+                background: reason === r ? "var(--primary-glow)" : "var(--secondary)",
+                border: reason === r ? "1px solid var(--primary)" : "1px solid transparent",
+              }}
+            >
+              <input
+                type="radio"
+                name="reason"
+                checked={reason === r}
+                onChange={() => setReason(r)}
+                className="accent-primary"
+              />
+              <span>{r}</span>
+            </label>
+          ))}
+        </div>
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-full border border-border px-5 py-3 text-sm font-medium text-muted-foreground"
+          >
+            取消
+          </button>
+          <button
+            onClick={() => onSubmit(reason)}
+            className="flex-[2] rounded-full px-5 py-3 text-sm font-semibold text-destructive-foreground"
+            style={{ background: "var(--destructive)" }}
+          >
+            提交举报
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AppealModal({ onClose }: { onClose: () => void }) {
+  const [reason, setReason] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-end sm:place-items-center"
+      style={{ background: "rgba(0,0,0,0.45)" }}
+      onClick={onClose}
+    >
+      <div
+        className="glass shadow-soft w-full max-w-[480px] p-5 animate-fade-up"
+        style={{ borderTopLeftRadius: 32, borderTopRightRadius: 32 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-base font-semibold">信用分申诉</h3>
+          <button onClick={onClose} className="text-lg text-muted-foreground" aria-label="关闭">
+            ✕
+          </button>
+        </div>
+        {submitted ? (
+          <div className="py-6 text-center">
+            <p className="text-3xl">📨</p>
+            <p className="mt-3 text-sm text-foreground">已记录，管理员会尽快处理。</p>
+            <button
+              onClick={onClose}
+              className="mt-5 rounded-full px-6 py-2.5 text-sm font-semibold text-primary-foreground gradient-warm"
+            >
+              好的
+            </button>
+          </div>
+        ) : (
+          <>
+            <p className="text-xs text-muted-foreground">
+              告诉我们发生了什么。我们会人工复核你的申诉。
+            </p>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value.slice(0, 300))}
+              rows={4}
+              placeholder="例如：我并未发布违规内容…"
+              className="mt-3 w-full resize-none rounded-2xl bg-background/60 p-3 text-sm outline-none"
+              style={{ border: "1px solid var(--border)" }}
+            />
+            <div className="mt-1 text-right text-xs text-muted-foreground">{reason.length} / 300</div>
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={onClose}
+                className="flex-1 rounded-full border border-border px-5 py-3 text-sm font-medium text-muted-foreground"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => setSubmitted(true)}
+                disabled={!reason.trim()}
+                className="flex-[2] rounded-full px-5 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50 gradient-warm"
+              >
+                提交申诉
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
