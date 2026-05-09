@@ -110,15 +110,22 @@ function TreeholeView() {
   }, []);
 
   const blocked = creditScore < 60;
+  const [reportTarget, setReportTarget] = useState<TreeholePost | null>(null);
+  const [appealOpen, setAppealOpen] = useState(false);
 
   const submit = async () => {
     if (!content.trim() || submitting || blocked) return;
+    const cleaned = sanitizeUserText(content);
+    if (!cleaned) {
+      setToast("内容包含不当词汇，请修改后再发");
+      setTimeout(() => setToast(null), 2200);
+      return;
+    }
     setSubmitting(true);
     try {
-      const cleaned = filterBannedWords(content.trim()).slice(0, 500);
       await addPost({
         anonymousAnimal: animal,
-        content: cleaned,
+        content: cleaned.slice(0, 500),
         emotionTag: tag,
         createdAt: new Date().toISOString(),
         replies: [],
@@ -136,11 +143,16 @@ function TreeholeView() {
   };
 
   const submitReply = async (post: TreeholePost, replyText: string) => {
-    if (!replyText.trim()) return;
-    const cleaned = filterBannedWords(replyText.trim()).slice(0, 200);
+    if (!replyText.trim() || blocked) return;
+    const cleaned = sanitizeUserText(replyText);
+    if (!cleaned) {
+      setToast("内容包含不当词汇，请修改后再发");
+      setTimeout(() => setToast(null), 2200);
+      return;
+    }
     post.replies.push({
       animal: pick(ANIMALS),
-      content: cleaned,
+      content: cleaned.slice(0, 200),
       createdAt: new Date().toISOString(),
     });
     await updatePost(post);
@@ -152,10 +164,22 @@ function TreeholeView() {
     refresh();
   };
 
-  const report = async (post: TreeholePost) => {
+  const submitReport = async (post: TreeholePost, _reason: string) => {
     post.reportCount += 1;
-    if (post.reportCount >= 3) post.isHidden = true;
+    let deducted = false;
+    if (post.reportCount >= 3 && !post.isHidden) {
+      post.isHidden = true;
+      const u = await getUser(post.openid || DEMO_OPENID);
+      await updateUser(
+        { creditScore: Math.max(0, u.creditScore - 20) },
+        post.openid || DEMO_OPENID
+      );
+      deducted = true;
+    }
     await updatePost(post);
+    setReportTarget(null);
+    setToast(deducted ? "已举报 · 帖子已隐藏" : "已举报，谢谢你");
+    setTimeout(() => setToast(null), 2200);
     refresh();
   };
 
