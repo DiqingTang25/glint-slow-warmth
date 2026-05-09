@@ -1,21 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/glint/AppShell";
 import {
-  DEMO_OPENID,
   addLetter,
   addLightPoints,
+  claimLetter,
   listInbox,
   listOutbox,
-  markLetterRead,
   type Letter,
 } from "@/lib/glint-db";
+import { getCurrentOpenid } from "@/lib/glint-auth";
 import {
   LETTER_STARTERS,
   LETTER_THEMES,
-  PEN_PAL_NAMES,
-  PEN_PAL_REPLIES,
-  SEED_LETTERS,
   filterBannedWords,
   pick,
   relativeTime,
@@ -30,17 +27,12 @@ export const Route = createFileRoute("/companion")({
   ),
 });
 
-const SEED_KEY = "glint:companion-seeded";
-const REPLY_DELAY_MS = 45 * 1000; // 演示版：45 秒
-
 function CompanionView() {
   const [tab, setTab] = useState<"inbox" | "compose" | "outbox">("inbox");
   const [inbox, setInbox] = useState<Letter[]>([]);
   const [outbox, setOutbox] = useState<Letter[]>([]);
   const [openLetter, setOpenLetter] = useState<Letter | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [now, setNow] = useState(() => Date.now());
-  const seededRef = useRef(false);
 
   const refresh = async () => {
     const [i, o] = await Promise.all([listInbox(), listOutbox()]);
@@ -48,35 +40,9 @@ function CompanionView() {
     setOutbox(o);
   };
 
-  // Seed inbox on first visit
   useEffect(() => {
-    (async () => {
-      if (seededRef.current) return;
-      seededRef.current = true;
-      if (typeof localStorage !== "undefined" && !localStorage.getItem(SEED_KEY)) {
-        for (const seed of SEED_LETTERS) {
-          await addLetter({
-            fromOpenid: `pen_pal_${seed.from}`,
-            fromName: seed.from,
-            toOpenid: DEMO_OPENID,
-            theme: seed.theme,
-            content: seed.content,
-            createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
-            deliverAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
-          });
-        }
-        localStorage.setItem(SEED_KEY, "1");
-      }
-      await refresh();
-    })();
-  }, []);
-
-  // Tick for countdowns + redeliver newly-arrived letters
-  useEffect(() => {
-    const t = setInterval(() => {
-      setNow(Date.now());
-      refresh();
-    }, 5000);
+    refresh();
+    const t = setInterval(refresh, 8000);
     return () => clearInterval(t);
   }, []);
 
@@ -87,30 +53,19 @@ function CompanionView() {
 
   const handleSend = async (theme: LetterTheme, content: string) => {
     const cleaned = filterBannedWords(content.trim()).slice(0, 600);
-    const palName = pick(PEN_PAL_NAMES);
-    const palOpenid = `pen_pal_${palName}_${Date.now()}`;
+    if (!cleaned) {
+      showToast("内容包含不当词汇");
+      return;
+    }
+    const me = getCurrentOpenid() || "anon";
     const sentAt = new Date();
-    // The "sent" letter shows up in outbox immediately
     await addLetter({
-      fromOpenid: DEMO_OPENID,
-      fromName: "你",
-      toOpenid: palOpenid,
+      fromOpenid: me,
+      fromName: "同频朋友",
       theme,
       content: cleaned,
       createdAt: sentAt.toISOString(),
       deliverAt: sentAt.toISOString(),
-    });
-    // Schedule a reply that arrives after REPLY_DELAY_MS
-    const replyContent = pick(PEN_PAL_REPLIES[theme] ?? PEN_PAL_REPLIES.other);
-    await addLetter({
-      fromOpenid: palOpenid,
-      fromName: palName,
-      toOpenid: DEMO_OPENID,
-      theme,
-      content: replyContent,
-      createdAt: new Date(sentAt.getTime() + REPLY_DELAY_MS).toISOString(),
-      deliverAt: new Date(sentAt.getTime() + REPLY_DELAY_MS).toISOString(),
-      isReply: true,
     });
     await addLightPoints(5);
     window.dispatchEvent(new Event("glint:user-updated"));
@@ -121,8 +76,8 @@ function CompanionView() {
 
   const openAndRead = async (l: Letter) => {
     setOpenLetter(l);
-    if (!l.readAt && l.id != null) {
-      await markLetterRead(l.id);
+    if (l.id != null && !l.claimedBy) {
+      await claimLetter(l.id);
       await refresh();
     }
   };
@@ -134,15 +89,11 @@ function CompanionView() {
       <header>
         <h1 className="text-3xl font-semibold tracking-tight">同频陪伴 🤝</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          慢信笺：写下心里的话，校园里某个同频的人会读到，并慢慢回你。
+          慢信笺：把心里话寄给同校的某个人。每封信只会被一个同学读到。
         </p>
       </header>
 
-      {/* Tab switcher */}
-      <div
-        className="glass shadow-soft flex p-1"
-        style={{ borderRadius: 100 }}
-      >
+      <div className="glass shadow-soft flex p-1" style={{ borderRadius: 100 }}>
         {(
           [
             { k: "inbox", label: `收件箱${unreadCount ? ` · ${unreadCount}` : ""}` },
@@ -169,15 +120,12 @@ function CompanionView() {
       {tab === "inbox" && (
         <LetterList
           letters={inbox}
-          empty="还没有信笺。先写一封，把光递给某个人吧。"
+          empty="还没有收到信。校园里某个同学一旦寄出，就会送到你这里。"
           onOpen={openAndRead}
-          highlightUnread
         />
       )}
 
-      {tab === "outbox" && (
-        <OutboxList letters={outbox} now={now} onOpen={openAndRead} />
-      )}
+      {tab === "outbox" && <OutboxList letters={outbox} onOpen={openAndRead} />}
 
       {openLetter && (
         <LetterModal letter={openLetter} onClose={() => setOpenLetter(null)} />
@@ -256,7 +204,7 @@ function Compose({ onSend }: { onSend: (t: LetterTheme, c: string) => void }) {
         {submitting ? "正在折叠信纸…" : "封口寄出 +5 ✨"}
       </button>
       <p className="mt-2 text-center text-[11px] text-muted-foreground">
-        信笺会在数十秒内被某个同频的同学收到，对方有空时会慢慢回你。
+        信会进入校园慢信池，由某位同学读到。请把这份慢，留给真正需要的人。
       </p>
     </section>
   );
@@ -271,12 +219,10 @@ function LetterList({
   letters,
   empty,
   onOpen,
-  highlightUnread = false,
 }: {
   letters: Letter[];
   empty: string;
   onOpen: (l: Letter) => void;
-  highlightUnread?: boolean;
 }) {
   if (letters.length === 0) {
     return (
@@ -288,7 +234,7 @@ function LetterList({
   return (
     <ul className="space-y-3">
       {letters.map((l) => {
-        const unread = highlightUnread && !l.readAt;
+        const unread = !l.readAt;
         return (
           <li key={l.id}>
             <button
@@ -300,16 +246,13 @@ function LetterList({
               }}
             >
               <div className="flex items-center justify-between text-xs">
-                <span className="font-medium text-foreground">
-                  {l.isReply ? "↩ " : ""}
-                  {l.fromName}
-                </span>
+                <span className="font-medium text-foreground">{l.fromName}</span>
                 <span className="text-muted-foreground">
                   {themeBadge(l.theme)} · {relativeTime(l.deliverAt)}
                 </span>
               </div>
               <p
-                className="mt-2 line-clamp-2 text-sm text-foreground"
+                className="mt-2 text-sm text-foreground"
                 style={{
                   fontFamily: "Georgia, 'Times New Roman', serif",
                   display: "-webkit-box",
@@ -323,10 +266,7 @@ function LetterList({
               {unread && (
                 <span
                   className="mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                  style={{
-                    background: "var(--primary-glow)",
-                    color: "var(--primary)",
-                  }}
+                  style={{ background: "var(--primary-glow)", color: "var(--primary)" }}
                 >
                   · 未读
                 </span>
@@ -339,15 +279,7 @@ function LetterList({
   );
 }
 
-function OutboxList({
-  letters,
-  now,
-  onOpen,
-}: {
-  letters: Letter[];
-  now: number;
-  onOpen: (l: Letter) => void;
-}) {
+function OutboxList({ letters, onOpen }: { letters: Letter[]; onOpen: (l: Letter) => void }) {
   if (letters.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
@@ -358,7 +290,7 @@ function OutboxList({
   return (
     <ul className="space-y-3">
       {letters.map((l) => {
-        const arrived = new Date(l.deliverAt).getTime() <= now;
+        const claimed = !!l.claimedBy;
         return (
           <li key={l.id}>
             <button
@@ -367,15 +299,13 @@ function OutboxList({
               style={{ borderRadius: 20 }}
             >
               <div className="flex items-center justify-between text-xs">
-                <span className="font-medium text-foreground">
-                  寄给「{l.fromName === "你" ? "同频朋友" : l.fromName}」
-                </span>
+                <span className="font-medium text-foreground">寄出</span>
                 <span className="text-muted-foreground">
                   {themeBadge(l.theme)} · {relativeTime(l.createdAt)}
                 </span>
               </div>
               <p
-                className="mt-2 line-clamp-2 text-sm text-foreground"
+                className="mt-2 text-sm text-foreground"
                 style={{
                   fontFamily: "Georgia, 'Times New Roman', serif",
                   display: "-webkit-box",
@@ -388,9 +318,9 @@ function OutboxList({
               </p>
               <p
                 className="mt-2 text-[11px]"
-                style={{ color: arrived ? "var(--success)" : "var(--muted-foreground)" }}
+                style={{ color: claimed ? "var(--success)" : "var(--muted-foreground)" }}
               >
-                {arrived ? "✓ 已被某位同学读到" : "⏳ 信笺正在路上…"}
+                {claimed ? "✓ 已被某位同学读到" : "⏳ 信还在慢信池里…"}
               </p>
             </button>
           </li>
@@ -418,13 +348,8 @@ function LetterModal({ letter, onClose }: { letter: Letter; onClose: () => void 
             ✕
           </button>
         </div>
-        <h3 className="mt-2 text-base font-semibold">
-          {letter.isReply ? "↩ " : ""}
-          来自「{letter.fromName}」
-        </h3>
-        <p className="text-[11px] text-muted-foreground">
-          {relativeTime(letter.deliverAt)}
-        </p>
+        <h3 className="mt-2 text-base font-semibold">来自「{letter.fromName}」</h3>
+        <p className="text-[11px] text-muted-foreground">{relativeTime(letter.deliverAt)}</p>
         <div
           className="mt-4 whitespace-pre-wrap rounded-2xl bg-background/50 p-4 text-sm leading-relaxed text-foreground"
           style={{
@@ -435,7 +360,7 @@ function LetterModal({ letter, onClose }: { letter: Letter; onClose: () => void 
           {letter.content}
         </div>
         <p className="mt-3 text-center text-[11px] text-muted-foreground">
-          每封信只会被一个人读到。请把这份慢，留给真正需要的人。
+          每封信只会被一个人读到。
         </p>
       </div>
     </div>

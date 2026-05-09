@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/glint/AppShell";
 import {
-  DEMO_OPENID,
   addLightPoints,
   addPost,
   getUser,
@@ -11,6 +10,7 @@ import {
   updateUser,
   type TreeholePost,
 } from "@/lib/glint-db";
+import { getCurrentOpenid } from "@/lib/glint-auth";
 import {
   AI_REPLIES,
   ANIMALS,
@@ -132,7 +132,7 @@ function TreeholeView() {
         hasAIReply: false,
         reportCount: 0,
         isHidden: false,
-        openid: DEMO_OPENID,
+        openid: getCurrentOpenid() || "anon",
       });
       setContent("");
       setAnimal(pick(ANIMALS));
@@ -164,16 +164,16 @@ function TreeholeView() {
     refresh();
   };
 
-  const submitReport = async (post: TreeholePost, _reason: string) => {
+  const submitReport = async (post: TreeholePost, reason: string) => {
     post.reportCount += 1;
+    post.reportReasons = [...(post.reportReasons || []), reason];
     let deducted = false;
     if (post.reportCount >= 3 && !post.isHidden) {
       post.isHidden = true;
-      const u = await getUser(post.openid || DEMO_OPENID);
-      await updateUser(
-        { creditScore: Math.max(0, u.creditScore - 20) },
-        post.openid || DEMO_OPENID
-      );
+      if (post.openid) {
+        const u = await getUser(post.openid);
+        await updateUser({ creditScore: Math.max(0, u.creditScore - 20) }, post.openid);
+      }
       deducted = true;
     }
     await updatePost(post);
