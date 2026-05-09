@@ -66,6 +66,11 @@ function openDB(): Promise<IDBDatabase> {
         const s = db.createObjectStore("treeholePosts", { keyPath: "id", autoIncrement: true });
         s.createIndex("byCreatedAt", "createdAt");
       }
+      if (!db.objectStoreNames.contains("letters")) {
+        const s = db.createObjectStore("letters", { keyPath: "id", autoIncrement: true });
+        s.createIndex("byToOpenid", "toOpenid");
+        s.createIndex("byFromOpenid", "fromOpenid");
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
