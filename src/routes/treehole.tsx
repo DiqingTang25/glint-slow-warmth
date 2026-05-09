@@ -32,7 +32,8 @@ function TreeholePage() {
   );
 }
 
-const AI_REPLY_AFTER_MS = 30 * 60 * 1000;
+// 演示版：缩短为 60 秒，正式版会改回 30 分钟
+const AI_REPLY_AFTER_MS = 60 * 1000;
 
 function TreeholeView() {
   const [posts, setPosts] = useState<TreeholePost[]>([]);
@@ -43,6 +44,9 @@ function TreeholeView() {
   const [submitting, setSubmitting] = useState(false);
   const [replyTo, setReplyTo] = useState<TreeholePost | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const [freshIds, setFreshIds] = useState<Set<number>>(new Set());
+  const aiInFlight = useRef<Set<number>>(new Set());
 
   const refresh = async () => {
     const [p, u] = await Promise.all([listPosts(), getUser()]);
@@ -52,32 +56,55 @@ function TreeholeView() {
 
   useEffect(() => {
     refresh();
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
   }, []);
 
-  // Scan for posts needing AI reply on load
+  // Periodically check for posts that should receive an AI reply.
+  // Use a ref-set guard so the same post is never generated twice (Strict Mode safe).
   useEffect(() => {
-    (async () => {
+    let cancelled = false;
+    const tick = async () => {
       const all = await listPosts();
-      const now = Date.now();
+      const t = Date.now();
       let changed = false;
       for (const p of all) {
-        if (
-          !p.hasAIReply &&
-          p.replies.length === 0 &&
-          now - new Date(p.createdAt).getTime() >= AI_REPLY_AFTER_MS
-        ) {
-          p.replies.push({
-            animal: "AI暖心伙伴",
-            content: pick(AI_REPLIES),
-            createdAt: new Date().toISOString(),
+        if (p.id == null) continue;
+        if (p.hasAIReply || p.replies.length > 0) continue;
+        if (aiInFlight.current.has(p.id)) continue;
+        if (t - new Date(p.createdAt).getTime() < AI_REPLY_AFTER_MS) continue;
+        aiInFlight.current.add(p.id);
+        // re-fetch to make sure no other tab/race added one already
+        // (we hold the lock via aiInFlight set)
+        p.replies.push({
+          animal: "AI暖心伙伴",
+          content: pick(AI_REPLIES),
+          createdAt: new Date().toISOString(),
+        });
+        p.hasAIReply = true;
+        await updatePost(p);
+        if (cancelled) return;
+        setFreshIds((s) => new Set(s).add(p.id!));
+        setToast("🌿 AI 暖心伙伴回应了你");
+        setTimeout(() => setToast(null), 2400);
+        // clear fresh flag after the animation
+        setTimeout(() => {
+          setFreshIds((s) => {
+            const next = new Set(s);
+            next.delete(p.id!);
+            return next;
           });
-          p.hasAIReply = true;
-          await updatePost(p);
-          changed = true;
-        }
+        }, 1400);
+        changed = true;
       }
-      if (changed) refresh();
-    })();
+      if (changed && !cancelled) refresh();
+    };
+    tick();
+    const interval = setInterval(tick, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   const blocked = creditScore < 60;
