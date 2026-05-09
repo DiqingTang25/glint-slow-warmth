@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/glint/AppShell";
 import {
   DEMO_OPENID,
@@ -32,7 +32,8 @@ function TreeholePage() {
   );
 }
 
-const AI_REPLY_AFTER_MS = 30 * 60 * 1000;
+// 演示版：缩短为 60 秒，正式版会改回 30 分钟
+const AI_REPLY_AFTER_MS = 60 * 1000;
 
 function TreeholeView() {
   const [posts, setPosts] = useState<TreeholePost[]>([]);
@@ -43,6 +44,9 @@ function TreeholeView() {
   const [submitting, setSubmitting] = useState(false);
   const [replyTo, setReplyTo] = useState<TreeholePost | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const [freshIds, setFreshIds] = useState<Set<number>>(new Set());
+  const aiInFlight = useRef<Set<number>>(new Set());
 
   const refresh = async () => {
     const [p, u] = await Promise.all([listPosts(), getUser()]);
@@ -52,32 +56,55 @@ function TreeholeView() {
 
   useEffect(() => {
     refresh();
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
   }, []);
 
-  // Scan for posts needing AI reply on load
+  // Periodically check for posts that should receive an AI reply.
+  // Use a ref-set guard so the same post is never generated twice (Strict Mode safe).
   useEffect(() => {
-    (async () => {
+    let cancelled = false;
+    const tick = async () => {
       const all = await listPosts();
-      const now = Date.now();
+      const t = Date.now();
       let changed = false;
       for (const p of all) {
-        if (
-          !p.hasAIReply &&
-          p.replies.length === 0 &&
-          now - new Date(p.createdAt).getTime() >= AI_REPLY_AFTER_MS
-        ) {
-          p.replies.push({
-            animal: "AI暖心伙伴",
-            content: pick(AI_REPLIES),
-            createdAt: new Date().toISOString(),
+        if (p.id == null) continue;
+        if (p.hasAIReply || p.replies.length > 0) continue;
+        if (aiInFlight.current.has(p.id)) continue;
+        if (t - new Date(p.createdAt).getTime() < AI_REPLY_AFTER_MS) continue;
+        aiInFlight.current.add(p.id);
+        // re-fetch to make sure no other tab/race added one already
+        // (we hold the lock via aiInFlight set)
+        p.replies.push({
+          animal: "AI暖心伙伴",
+          content: pick(AI_REPLIES),
+          createdAt: new Date().toISOString(),
+        });
+        p.hasAIReply = true;
+        await updatePost(p);
+        if (cancelled) return;
+        setFreshIds((s) => new Set(s).add(p.id!));
+        setToast("🌿 AI 暖心伙伴回应了你");
+        setTimeout(() => setToast(null), 2400);
+        // clear fresh flag after the animation
+        setTimeout(() => {
+          setFreshIds((s) => {
+            const next = new Set(s);
+            next.delete(p.id!);
+            return next;
           });
-          p.hasAIReply = true;
-          await updatePost(p);
-          changed = true;
-        }
+        }, 1400);
+        changed = true;
       }
-      if (changed) refresh();
-    })();
+      if (changed && !cancelled) refresh();
+    };
+    tick();
+    const interval = setInterval(tick, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   const blocked = creditScore < 60;
@@ -217,6 +244,9 @@ function TreeholeView() {
             canReply={creditScore >= 80}
             onReply={() => setReplyTo(p)}
             onReport={() => report(p)}
+            now={now}
+            aiArrivesInMs={AI_REPLY_AFTER_MS}
+            isFresh={p.id != null && freshIds.has(p.id)}
           />
         ))}
       </section>
@@ -246,15 +276,26 @@ function PostCard({
   canReply,
   onReply,
   onReport,
+  now,
+  aiArrivesInMs,
+  isFresh,
 }: {
   post: TreeholePost;
   canReply: boolean;
   onReply: () => void;
   onReport: () => void;
+  now: number;
+  aiArrivesInMs: number;
+  isFresh: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const long = post.content.length > 100;
   const display = expanded || !long ? post.content : post.content.slice(0, 100) + "…";
+
+  const elapsed = now - new Date(post.createdAt).getTime();
+  const remainMs = Math.max(0, aiArrivesInMs - elapsed);
+  const remainSec = Math.ceil(remainMs / 1000);
+  const aiPending = !post.hasAIReply && post.replies.length === 0;
 
   return (
     <article className="glass shadow-soft p-5" style={{ borderRadius: 24 }}>
@@ -281,8 +322,18 @@ function PostCard({
         <div className="mt-4 space-y-3 rounded-2xl bg-background/40 p-3">
           {post.replies.map((r, i) => {
             const isAI = r.animal === "AI暖心伙伴";
+            const isLast = i === post.replies.length - 1;
+            const showFresh = isFresh && isAI && isLast;
             return (
-              <div key={i} className="text-xs leading-relaxed">
+              <div
+                key={i}
+                className={`text-xs leading-relaxed rounded-xl ${showFresh ? "glint-fresh" : ""}`}
+                style={
+                  showFresh
+                    ? { padding: 8, background: "var(--primary-glow)" }
+                    : undefined
+                }
+              >
                 <div className="flex items-center gap-2">
                   <span
                     className="font-medium"
@@ -298,9 +349,34 @@ function PostCard({
             );
           })}
         </div>
+      ) : aiPending && remainMs > 0 ? (
+        <div
+          className="mt-3 flex items-center gap-2 rounded-xl px-3 py-2 text-[11px]"
+          style={{
+            background: "var(--primary-glow)",
+            color: "var(--primary)",
+          }}
+        >
+          <span className="glint-typing">
+            <span /><span /><span />
+          </span>
+          <span>
+            🌿 AI 暖心伙伴正在赶来 · 还有 {remainSec}s
+          </span>
+        </div>
+      ) : aiPending ? (
+        <div
+          className="mt-3 flex items-center gap-2 rounded-xl px-3 py-2 text-[11px]"
+          style={{ background: "var(--primary-glow)", color: "var(--primary)" }}
+        >
+          <span className="glint-typing">
+            <span /><span /><span />
+          </span>
+          <span>🌿 AI 暖心伙伴正在编织回应…</span>
+        </div>
       ) : (
         <p className="mt-3 text-[11px] text-muted-foreground">
-          还没有回声。若 30 分钟内无人回应，AI 暖心伙伴会陪陪 ta。
+          还没有人类回声，AI 暖心伙伴已经陪过 ta。
         </p>
       )}
 

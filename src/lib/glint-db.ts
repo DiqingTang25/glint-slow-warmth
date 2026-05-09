@@ -1,6 +1,6 @@
 // IndexedDB wrapper for Glint Slow Warmth
 const DB_NAME = "GlintSlowWarmthDB";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const DEMO_OPENID = "demo_user_001";
 
@@ -65,6 +65,11 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains("treeholePosts")) {
         const s = db.createObjectStore("treeholePosts", { keyPath: "id", autoIncrement: true });
         s.createIndex("byCreatedAt", "createdAt");
+      }
+      if (!db.objectStoreNames.contains("letters")) {
+        const s = db.createObjectStore("letters", { keyPath: "id", autoIncrement: true });
+        s.createIndex("byToOpenid", "toOpenid");
+        s.createIndex("byFromOpenid", "fromOpenid");
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -162,4 +167,51 @@ export async function updatePost(post: TreeholePost): Promise<void> {
 
 export async function getPost(id: number): Promise<TreeholePost | undefined> {
   return tx<TreeholePost | undefined>("treeholePosts", "readonly", (s) => s.get(id) as IDBRequest<TreeholePost | undefined>);
+}
+
+// ---------- Letters (同频陪伴) ----------
+export type Letter = {
+  id?: number;
+  fromOpenid: string;
+  fromName: string;
+  toOpenid: string;
+  theme: string;
+  content: string;
+  createdAt: string;
+  deliverAt: string; // when it becomes visible to recipient
+  readAt?: string;
+  isReply?: boolean;
+  parentId?: number;
+};
+
+export async function listInbox(openid = DEMO_OPENID): Promise<Letter[]> {
+  const all = await tx<Letter[]>("letters", "readonly", (s) =>
+    s.index("byToOpenid").getAll(openid)
+  );
+  const now = new Date().toISOString();
+  return all
+    .filter((l) => l.deliverAt <= now)
+    .sort((a, b) => b.deliverAt.localeCompare(a.deliverAt));
+}
+
+export async function listOutbox(openid = DEMO_OPENID): Promise<Letter[]> {
+  const all = await tx<Letter[]>("letters", "readonly", (s) =>
+    s.index("byFromOpenid").getAll(openid)
+  );
+  return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function addLetter(letter: Omit<Letter, "id">): Promise<Letter> {
+  const id = await tx<IDBValidKey>("letters", "readwrite", (s) => s.add(letter));
+  return { ...letter, id: id as number };
+}
+
+export async function markLetterRead(id: number): Promise<void> {
+  const l = await tx<Letter | undefined>("letters", "readonly", (s) =>
+    s.get(id) as IDBRequest<Letter | undefined>
+  );
+  if (l && !l.readAt) {
+    l.readAt = new Date().toISOString();
+    await tx("letters", "readwrite", (s) => s.put(l));
+  }
 }
