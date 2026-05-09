@@ -228,6 +228,15 @@ function TreeholeView() {
           onSubmit={(text) => submitReply(replyTo, text)}
         />
       )}
+
+      {toast && (
+        <div
+          className="glass shadow-soft fixed left-1/2 z-[60] -translate-x-1/2 rounded-full px-5 py-3 text-sm font-medium text-foreground animate-fade-up"
+          style={{ bottom: 96, border: "1px solid var(--primary)" }}
+        >
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
