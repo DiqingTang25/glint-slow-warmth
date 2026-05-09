@@ -276,15 +276,26 @@ function PostCard({
   canReply,
   onReply,
   onReport,
+  now,
+  aiArrivesInMs,
+  isFresh,
 }: {
   post: TreeholePost;
   canReply: boolean;
   onReply: () => void;
   onReport: () => void;
+  now: number;
+  aiArrivesInMs: number;
+  isFresh: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const long = post.content.length > 100;
   const display = expanded || !long ? post.content : post.content.slice(0, 100) + "…";
+
+  const elapsed = now - new Date(post.createdAt).getTime();
+  const remainMs = Math.max(0, aiArrivesInMs - elapsed);
+  const remainSec = Math.ceil(remainMs / 1000);
+  const aiPending = !post.hasAIReply && post.replies.length === 0;
 
   return (
     <article className="glass shadow-soft p-5" style={{ borderRadius: 24 }}>
@@ -311,8 +322,18 @@ function PostCard({
         <div className="mt-4 space-y-3 rounded-2xl bg-background/40 p-3">
           {post.replies.map((r, i) => {
             const isAI = r.animal === "AI暖心伙伴";
+            const isLast = i === post.replies.length - 1;
+            const showFresh = isFresh && isAI && isLast;
             return (
-              <div key={i} className="text-xs leading-relaxed">
+              <div
+                key={i}
+                className={`text-xs leading-relaxed rounded-xl ${showFresh ? "glint-fresh" : ""}`}
+                style={
+                  showFresh
+                    ? { padding: 8, background: "var(--primary-glow)" }
+                    : undefined
+                }
+              >
                 <div className="flex items-center gap-2">
                   <span
                     className="font-medium"
@@ -328,9 +349,36 @@ function PostCard({
             );
           })}
         </div>
+      ) : aiPending && remainMs > 0 ? (
+        <div
+          className="mt-3 flex items-center gap-2 rounded-xl px-3 py-2 text-[11px]"
+          style={{
+            background: "var(--primary-glow)",
+            color: "var(--primary)",
+          }}
+        >
+          <span className="glint-typing">
+            <span /><span /><span />
+          </span>
+          <span>
+            🌿 AI 暖心伙伴正在赶来 · 还有 {remainSec}s
+          </span>
+        </div>
+      ) : aiPending ? (
+        <div
+          className="mt-3 flex items-center gap-2 rounded-xl px-3 py-2 text-[11px]"
+          style={{ background: "var(--primary-glow)", color: "var(--primary)" }}
+        >
+          <span className="glint-typing">
+            <span /><span /><span />
+          </span>
+          <span>🌿 AI 暖心伙伴正在编织回应…</span>
+        </div>
       ) : (
         <p className="mt-3 text-[11px] text-muted-foreground">
-          还没有回声。若 30 分钟内无人回应，AI 暖心伙伴会陪陪 ta。
+          还没有人类回声，AI 暖心伙伴已经陪过 ta。
+        </p>
+      )}
         </p>
       )}
 
