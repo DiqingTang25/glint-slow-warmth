@@ -81,6 +81,71 @@ export const REPLY_TEMPLATES = [
   "想给你一个温柔的回应……",
 ];
 
+export const LETTER_THEMES = [
+  { key: "study", emoji: "📚", label: "学业" },
+  { key: "love", emoji: "💌", label: "感情" },
+  { key: "future", emoji: "🌅", label: "迷茫" },
+  { key: "homesick", emoji: "🏠", label: "想家" },
+  { key: "joy", emoji: "🌼", label: "小确幸" },
+  { key: "other", emoji: "✨", label: "其他" },
+] as const;
+
+export type LetterTheme = (typeof LETTER_THEMES)[number]["key"];
+
+export const PEN_PAL_NAMES = [
+  "西操跑道上的风", "二食堂二楼的光", "BB楼23层的云",
+  "图书馆窗边的雨", "湖边的晚霞", "宿舍楼下的猫",
+];
+
+export const LETTER_STARTERS = [
+  "见信好。今天写信给你，是因为……",
+  "你好呀，陌生的同频朋友。",
+  "如果可以，我想悄悄对你说……",
+  "这封信不需要回复，只是想被听见。",
+];
+
+export const PEN_PAL_REPLIES: Record<LetterTheme, string[]> = {
+  study: [
+    "学业的压力像看不见的风，但你已经站着没有倒下，这本身就很厉害了。慢一点，没关系。",
+    "我也在赶 ddl 的夜里写过类似的话。给你一个隔空的击掌🤝，明天的我们会继续努力。",
+  ],
+  love: [
+    "感情这件事没有正确答案。你愿意说出来，已经比很多人都勇敢了。",
+    "无论结果如何，请先好好爱自己。爱不是消耗，是彼此都更亮一点。",
+  ],
+  future: [
+    "迷茫的时候，先不要做大决定。把今天过好，路就长出来了。",
+    "我也常常不知道方向，但我们走着走着，会有光从某个地方照进来的。",
+  ],
+  homesick: [
+    "想家的时候记得吃顿热饭。家会一直在那儿，等你慢慢长大再回去看它。",
+    "我把一杯热水放在窗台上，假装是从家乡带来的。给你也留一杯。",
+  ],
+  joy: [
+    "谢谢你分享的小确幸，我读完之后嘴角也翘起来了。世界因此多了一束光。",
+    "请继续把这些小事记下来，它们会在你低谷的时候点燃自己。",
+  ],
+  other: [
+    "我读了你的信，谢谢你愿意说。你不是一个人。",
+    "隔着校园的某个角落，我在想你。希望今晚你睡得安稳。",
+  ],
+};
+
+export const SEED_LETTERS: Array<{ theme: LetterTheme; from: string; content: string }> = [
+  {
+    theme: "future",
+    from: "南门外的银杏",
+    content:
+      "见信好。最近每天都在赶 due，赶完一个又一个，却觉得自己什么都没学到。\n如果你也在这样的夜里，我想悄悄告诉你：能撑到现在已经很厉害了。我们一起，慢慢来。",
+  },
+  {
+    theme: "joy",
+    from: "BB楼楼梯口的猫",
+    content:
+      "今天在校园里看到了一只胖橘猫，它在草坪上打了个滚就走了，我莫名其妙地笑了好久。\n世界很大，烦恼很多，但今天有一只猫为我营业。希望你也能被一些小事温柔击中。",
+  },
+];
+
 export function filterBannedWords(text: string): string {
   let out = text;
   for (const w of BANNED_WORDS) {
