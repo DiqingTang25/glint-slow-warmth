@@ -194,13 +194,20 @@ function TreeholeView() {
 
       {blocked && (
         <div
-          className="rounded-2xl p-4 text-sm"
+          className="rounded-2xl p-4 text-sm flex items-center justify-between gap-3"
           style={{
             background: "color-mix(in oklab, var(--destructive) 12%, transparent)",
             color: "var(--destructive)",
           }}
         >
-          你的信用分较低，暂时无法发帖或回应。请稍后再来。
+          <span>信用分过低（{creditScore}），暂时无法参与树洞</span>
+          <button
+            onClick={() => setAppealOpen(true)}
+            className="rounded-full px-3 py-1.5 text-xs font-semibold"
+            style={{ background: "var(--destructive)", color: "var(--destructive-foreground)" }}
+          >
+            申诉
+          </button>
         </div>
       )}
 
