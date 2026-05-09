@@ -274,9 +274,9 @@ function TreeholeView() {
           <PostCard
             key={p.id}
             post={p}
-            canReply={creditScore >= 80}
+            canReply={!blocked}
             onReply={() => setReplyTo(p)}
-            onReport={() => report(p)}
+            onReport={() => setReportTarget(p)}
             now={now}
             aiArrivesInMs={AI_REPLY_AFTER_MS}
             isFresh={p.id != null && freshIds.has(p.id)}
@@ -291,6 +291,16 @@ function TreeholeView() {
           onSubmit={(text) => submitReply(replyTo, text)}
         />
       )}
+
+      {reportTarget && (
+        <ReportModal
+          post={reportTarget}
+          onClose={() => setReportTarget(null)}
+          onSubmit={(reason) => submitReport(reportTarget, reason)}
+        />
+      )}
+
+      {appealOpen && <AppealModal onClose={() => setAppealOpen(false)} />}
 
       {toast && (
         <div
