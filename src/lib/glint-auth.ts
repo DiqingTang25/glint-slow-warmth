@@ -132,3 +132,30 @@ export function appendCreditLog(entry: CreditLog) {
   all.unshift(entry);
   safeLS()?.setItem(LOG_KEY, JSON.stringify(all.slice(0, 500)));
 }
+
+// Report action log
+export type ReportAction = "approve" | "reject";
+export type ReportActionLog = {
+  postId: number;
+  action: ReportAction;
+  reason: string;
+  reportReasons: string[];
+  postOpenid: string;
+  postAnimal: string;
+  postContent: string;
+  by: string;
+  at: string;
+};
+const REPORT_LOG_KEY = "glint:report-log";
+export function loadReportLog(): ReportActionLog[] {
+  try {
+    return JSON.parse(safeLS()?.getItem(REPORT_LOG_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+export function appendReportLog(entry: ReportActionLog) {
+  const all = loadReportLog();
+  all.unshift(entry);
+  safeLS()?.setItem(REPORT_LOG_KEY, JSON.stringify(all.slice(0, 1000)));
+}
