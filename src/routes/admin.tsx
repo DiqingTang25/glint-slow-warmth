@@ -337,8 +337,25 @@ function StatCard({ label, value, emoji }: { label: string; value: number; emoji
 
 function ReportsView() {
   const [posts, setPosts] = useState<TreeholePost[]>([]);
+  const [logs, setLogs] = useState<ReportActionLog[]>([]);
   const [toast, setToast] = useState<string | null>(null);
-  const refresh = () => listReportedPosts().then(setPosts);
+
+  // log filters
+  const [fAction, setFAction] = useState<"all" | "approve" | "reject">("all");
+  const [fAdmin, setFAdmin] = useState("");
+  const [fKeyword, setFKeyword] = useState("");
+  const [fFrom, setFFrom] = useState("");
+  const [fTo, setFTo] = useState("");
+  const [pendingReason, setPendingReason] = useState<{
+    post: TreeholePost;
+    action: ReportAction;
+  } | null>(null);
+  const [reasonText, setReasonText] = useState("");
+
+  const refresh = () => {
+    listReportedPosts().then(setPosts);
+    setLogs(loadReportLog());
+  };
   useEffect(() => {
     refresh();
   }, []);
@@ -348,34 +365,78 @@ function ReportsView() {
     setTimeout(() => setToast(null), 2000);
   };
 
-  const approve = async (p: TreeholePost) => {
+  const openConfirm = (post: TreeholePost, action: ReportAction) => {
+    setPendingReason({ post, action });
+    setReasonText(
+      action === "approve"
+        ? `举报通过：${(post.reportReasons || []).join(",") || "违规"}`
+        : "驳回：经核查未违规"
+    );
+  };
+
+  const submitDecision = async () => {
+    if (!pendingReason) return;
+    const { post: p, action } = pendingReason;
+    const reason = reasonText.trim() || (action === "approve" ? "通过举报" : "驳回举报");
     if (!p.id) return;
-    if (!confirm(`通过举报：永久删除「${p.anonymousAnimal}」的帖子，并扣除发帖人 20 信用分？`))
-      return;
-    if (p.openid) {
-      const u = await getUser(p.openid);
-      await updateUser({ creditScore: Math.max(0, u.creditScore - 20) }, p.openid);
-      appendCreditLog({
-        openid: p.openid,
-        delta: -20,
-        reason: `举报通过：${(p.reportReasons || []).join(",") || "违规"}`,
-        by: getSession()?.openid || "admin",
-        at: new Date().toISOString(),
-      });
+    const admin = getSession()?.openid || "admin";
+    const at = new Date().toISOString();
+
+    if (action === "approve") {
+      if (p.openid) {
+        const u = await getUser(p.openid);
+        await updateUser({ creditScore: Math.max(0, u.creditScore - 20) }, p.openid);
+        appendCreditLog({
+          openid: p.openid,
+          delta: -20,
+          reason: `举报通过：${reason}`,
+          by: admin,
+          at,
+        });
+      }
+      await deletePost(p.id);
+    } else {
+      p.reportCount = 0;
+      p.reportReasons = [];
+      p.isHidden = false;
+      await updatePost(p);
     }
-    await deletePost(p.id);
-    flash("已通过举报并删除");
+
+    appendReportLog({
+      postId: p.id,
+      action,
+      reason,
+      reportReasons: p.reportReasons || [],
+      postOpenid: p.openid || "",
+      postAnimal: p.anonymousAnimal || "",
+      postContent: p.content || "",
+      by: admin,
+      at,
+    });
+
+    setPendingReason(null);
+    setReasonText("");
+    flash(action === "approve" ? "已通过举报并删除" : "已驳回举报，帖子恢复显示");
     refresh();
   };
 
-  const reject = async (p: TreeholePost) => {
-    p.reportCount = 0;
-    p.reportReasons = [];
-    p.isHidden = false;
-    await updatePost(p);
-    flash("已驳回举报，帖子恢复显示");
-    refresh();
-  };
+  const filteredLogs = useMemo(() => {
+    const k = fKeyword.trim().toLowerCase();
+    const a = fAdmin.trim().toLowerCase();
+    const fromTs = fFrom ? new Date(fFrom).getTime() : 0;
+    const toTs = fTo ? new Date(fTo).getTime() + 86400000 : Infinity;
+    return logs.filter((l) => {
+      if (fAction !== "all" && l.action !== fAction) return false;
+      if (a && !l.by.toLowerCase().includes(a)) return false;
+      const t = new Date(l.at).getTime();
+      if (t < fromTs || t > toTs) return false;
+      if (k) {
+        const hay = `${l.reason} ${l.reportReasons.join(" ")} ${l.postContent} ${l.postAnimal} ${l.postOpenid}`.toLowerCase();
+        if (!hay.includes(k)) return false;
+      }
+      return true;
+    });
+  }, [logs, fAction, fAdmin, fKeyword, fFrom, fTo]);
 
   return (
     <div className="space-y-5">
@@ -422,13 +483,13 @@ function ReportsView() {
               )}
               <div className="mt-4 flex gap-2">
                 <button
-                  onClick={() => reject(p)}
+                  onClick={() => openConfirm(p, "reject")}
                   className="flex-1 rounded-full border border-border px-4 py-2 text-sm font-medium"
                 >
                   驳回（恢复）
                 </button>
                 <button
-                  onClick={() => approve(p)}
+                  onClick={() => openConfirm(p, "approve")}
                   className="flex-1 rounded-full px-4 py-2 text-sm font-semibold text-destructive-foreground"
                   style={{ background: "var(--destructive)" }}
                 >
@@ -439,10 +500,165 @@ function ReportsView() {
           ))}
         </ul>
       )}
+
+      {/* ───── Operation log ───── */}
+      <section className="glass shadow-soft p-5 mt-8" style={{ borderRadius: 20 }}>
+        <header className="flex items-center justify-between">
+          <h3 className="text-base font-semibold">操作日志</h3>
+          <span className="text-xs text-muted-foreground">
+            共 {filteredLogs.length} / {logs.length} 条
+          </span>
+        </header>
+
+        <div className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-2">
+          <select
+            value={fAction}
+            onChange={(e) => setFAction(e.target.value as typeof fAction)}
+            className="rounded-xl bg-background/60 px-3 py-2 text-xs"
+            style={{ border: "1px solid var(--border)" }}
+          >
+            <option value="all">全部操作</option>
+            <option value="approve">通过</option>
+            <option value="reject">驳回</option>
+          </select>
+          <input
+            value={fAdmin}
+            onChange={(e) => setFAdmin(e.target.value)}
+            placeholder="管理员账号"
+            className="rounded-xl bg-background/60 px-3 py-2 text-xs"
+            style={{ border: "1px solid var(--border)" }}
+          />
+          <input
+            value={fKeyword}
+            onChange={(e) => setFKeyword(e.target.value)}
+            placeholder="关键词（原因/内容）"
+            className="rounded-xl bg-background/60 px-3 py-2 text-xs col-span-2 md:col-span-1"
+            style={{ border: "1px solid var(--border)" }}
+          />
+          <input
+            type="date"
+            value={fFrom}
+            onChange={(e) => setFFrom(e.target.value)}
+            className="rounded-xl bg-background/60 px-3 py-2 text-xs"
+            style={{ border: "1px solid var(--border)" }}
+          />
+          <input
+            type="date"
+            value={fTo}
+            onChange={(e) => setFTo(e.target.value)}
+            className="rounded-xl bg-background/60 px-3 py-2 text-xs"
+            style={{ border: "1px solid var(--border)" }}
+          />
+        </div>
+
+        {filteredLogs.length === 0 ? (
+          <p className="mt-4 text-xs text-muted-foreground">暂无符合条件的日志。</p>
+        ) : (
+          <ul className="mt-4 space-y-2 max-h-[420px] overflow-auto pr-1">
+            {filteredLogs.map((l, i) => (
+              <li
+                key={i}
+                className="rounded-xl border border-border/60 bg-background/40 p-3 text-xs"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className="rounded-full px-2 py-0.5 font-semibold"
+                    style={{
+                      background:
+                        l.action === "approve"
+                          ? "color-mix(in oklab, var(--destructive) 15%, transparent)"
+                          : "color-mix(in oklab, var(--primary) 15%, transparent)",
+                      color:
+                        l.action === "approve" ? "var(--destructive)" : "var(--primary)",
+                    }}
+                  >
+                    {l.action === "approve" ? "通过" : "驳回"}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {new Date(l.at).toLocaleString("zh-CN", { hour12: false })}
+                  </span>
+                  <span className="text-muted-foreground">
+                    管理员 <b className="text-foreground">{l.by}</b>
+                  </span>
+                  <span className="text-muted-foreground">
+                    帖子 #{l.postId} · {l.postAnimal} · {maskOpenid(l.postOpenid || "anon")}
+                  </span>
+                </div>
+                <p className="mt-2 text-foreground">原因：{l.reason}</p>
+                {l.postContent && (
+                  <p className="mt-1 text-muted-foreground line-clamp-2">
+                    内容：{l.postContent}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* ───── Reason confirm modal ───── */}
+      {pendingReason && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.45)" }}
+          onClick={() => setPendingReason(null)}
+        >
+          <div
+            className="glass w-full max-w-md p-5"
+            style={{ borderRadius: 20 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold">
+              {pendingReason.action === "approve" ? "通过举报" : "驳回举报"}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {pendingReason.action === "approve"
+                ? "永久删除该帖子，并扣除发帖人 20 信用分。"
+                : "重置举报计数，恢复该帖子显示。"}
+            </p>
+            <label className="mt-4 block text-xs font-medium">操作原因（必填）</label>
+            <textarea
+              value={reasonText}
+              onChange={(e) => setReasonText(e.target.value)}
+              rows={3}
+              className="mt-1 w-full rounded-xl bg-background/60 px-3 py-2 text-sm outline-none"
+              style={{ border: "1px solid var(--border)" }}
+            />
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => setPendingReason(null)}
+                className="flex-1 rounded-full border border-border px-4 py-2 text-sm"
+              >
+                取消
+              </button>
+              <button
+                disabled={!reasonText.trim()}
+                onClick={submitDecision}
+                className="flex-1 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                style={{
+                  background:
+                    pendingReason.action === "approve"
+                      ? "var(--destructive)"
+                      : "var(--primary)",
+                  color:
+                    pendingReason.action === "approve"
+                      ? "var(--destructive-foreground)"
+                      : "var(--primary-foreground)",
+                }}
+              >
+                确认{pendingReason.action === "approve" ? "通过" : "驳回"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Toast text={toast} />
     </div>
   );
 }
+
+type ReportAction = "approve" | "reject";
 
 // ───────────────── Moderation ─────────────────
 
