@@ -346,6 +346,7 @@ function ReportsView() {
   const [fKeyword, setFKeyword] = useState("");
   const [fFrom, setFFrom] = useState("");
   const [fTo, setFTo] = useState("");
+  const [expanded, setExpanded] = useState<number | null>(null);
   const [pendingReason, setPendingReason] = useState<{
     post: TreeholePost;
     action: ReportAction;
