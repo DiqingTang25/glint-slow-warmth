@@ -556,43 +556,137 @@ function ReportsView() {
           <p className="mt-4 text-xs text-muted-foreground">暂无符合条件的日志。</p>
         ) : (
           <ul className="mt-4 space-y-2 max-h-[420px] overflow-auto pr-1">
-            {filteredLogs.map((l, i) => (
-              <li
-                key={i}
-                className="rounded-xl border border-border/60 bg-background/40 p-3 text-xs"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className="rounded-full px-2 py-0.5 font-semibold"
-                    style={{
-                      background:
-                        l.action === "approve"
-                          ? "color-mix(in oklab, var(--destructive) 15%, transparent)"
-                          : "color-mix(in oklab, var(--primary) 15%, transparent)",
-                      color:
-                        l.action === "approve" ? "var(--destructive)" : "var(--primary)",
-                    }}
+            {filteredLogs.map((l, i) => {
+              const isOpen = expanded === i;
+              const preview =
+                l.postContent.length > 60
+                  ? l.postContent.slice(0, 60) + "…"
+                  : l.postContent;
+              const fullContent =
+                l.postContent.length > 800
+                  ? l.postContent.slice(0, 800) + "…（已截断）"
+                  : l.postContent;
+              const fullReason =
+                l.reason.length > 400 ? l.reason.slice(0, 400) + "…（已截断）" : l.reason;
+              return (
+                <li
+                  key={i}
+                  className="rounded-xl border border-border/60 bg-background/40 text-xs transition"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(isOpen ? null : i)}
+                    className="w-full text-left p-3"
+                    aria-expanded={isOpen}
                   >
-                    {l.action === "approve" ? "通过" : "驳回"}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {new Date(l.at).toLocaleString("zh-CN", { hour12: false })}
-                  </span>
-                  <span className="text-muted-foreground">
-                    管理员 <b className="text-foreground">{l.by}</b>
-                  </span>
-                  <span className="text-muted-foreground">
-                    帖子 #{l.postId} · {l.postAnimal} · {maskOpenid(l.postOpenid || "anon")}
-                  </span>
-                </div>
-                <p className="mt-2 text-foreground">原因：{l.reason}</p>
-                {l.postContent && (
-                  <p className="mt-1 text-muted-foreground line-clamp-2">
-                    内容：{l.postContent}
-                  </p>
-                )}
-              </li>
-            ))}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className="rounded-full px-2 py-0.5 font-semibold"
+                        style={{
+                          background:
+                            l.action === "approve"
+                              ? "color-mix(in oklab, var(--destructive) 15%, transparent)"
+                              : "color-mix(in oklab, var(--primary) 15%, transparent)",
+                          color:
+                            l.action === "approve"
+                              ? "var(--destructive)"
+                              : "var(--primary)",
+                        }}
+                      >
+                        {l.action === "approve" ? "通过" : "驳回"}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {new Date(l.at).toLocaleString("zh-CN", { hour12: false })}
+                      </span>
+                      <span className="text-muted-foreground">
+                        管理员 <b className="text-foreground">{l.by}</b>
+                      </span>
+                      <span className="text-muted-foreground">
+                        帖子 #{l.postId} · {l.postAnimal} ·{" "}
+                        {maskOpenid(l.postOpenid || "anon")}
+                      </span>
+                      <span className="ml-auto text-muted-foreground">
+                        {isOpen ? "收起 ▲" : "展开 ▼"}
+                      </span>
+                    </div>
+                    {!isOpen && l.postContent && (
+                      <p className="mt-2 text-muted-foreground truncate">
+                        {preview}
+                      </p>
+                    )}
+                  </button>
+
+                  {isOpen && (
+                    <div className="border-t border-border/60 p-3 space-y-3 animate-fade-up">
+                      <div>
+                        <p className="text-[11px] font-semibold text-muted-foreground">
+                          帖子标题 / 匿名身份
+                        </p>
+                        <p className="mt-1 text-foreground">
+                          {l.postAnimal || "（无）"} · 帖子 #{l.postId}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[11px] font-semibold text-muted-foreground">
+                          帖子内容全文
+                        </p>
+                        <p className="mt-1 whitespace-pre-wrap text-foreground">
+                          {fullContent || "（内容已被删除或为空）"}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[11px] font-semibold text-muted-foreground">
+                          原举报原因
+                        </p>
+                        {l.reportReasons && l.reportReasons.length > 0 ? (
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {l.reportReasons.map((r, ri) => (
+                              <span
+                                key={ri}
+                                className="rounded-full bg-secondary px-2 py-0.5 text-[11px]"
+                              >
+                                {r}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-1 text-muted-foreground">（无原始举报原因）</p>
+                        )}
+                      </div>
+
+                      <div>
+                        <p className="text-[11px] font-semibold text-muted-foreground">
+                          管理员备注
+                        </p>
+                        <p className="mt-1 whitespace-pre-wrap text-foreground">
+                          {fullReason}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
+                        <span>
+                          处理时间：
+                          <b className="text-foreground">
+                            {new Date(l.at).toLocaleString("zh-CN", { hour12: false })}
+                          </b>
+                        </span>
+                        <span>
+                          操作管理员：<b className="text-foreground">{l.by}</b>
+                        </span>
+                        <span>
+                          发帖人：
+                          <b className="text-foreground">
+                            {maskOpenid(l.postOpenid || "anon")}
+                          </b>
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
